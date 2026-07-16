@@ -1,0 +1,12 @@
+- number: 30118
+  reason: nginx redirect regression; diagnosed in comments but fix requires deep starlette/uvicorn ProxyHeadersMiddleware work across deployment matrix
+- number: 27735
+  reason: virtual key stale-spend budget bug; maintainer (ryan-crabbe-berri) already engaged advising OP, risk of duplicating internal work
+- number: 29755
+  reason: vague Groq rate-limit report, no clear ask or repro beyond intermittent failures
+- number: 25563
+  reason: SOCKS5 per-model proxy feature; scope debatable, no maintainer signal it will be accepted
+- number: 25762
+  reason: unlimited SSO on Standard Plan is a pricing/product decision, not a code task
+- number: 27284
+  reason: FIPS scrypt; internal BerriAI employee (yassin-berriai) already opened a draft PR, likely handled internally
