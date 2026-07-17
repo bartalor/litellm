@@ -12,3 +12,5 @@
   reason: FIPS scrypt; internal BerriAI employee (yassin-berriai) already opened a draft PR, likely handled internally
 - number: 25390
   reason: Anthropic /v1/messages streaming drops tool_use.input for Gemini; could not reproduce on HEAD across multiple Gemini models and payload shapes, likely already fixed post-v1.81.14
+- number: 15560
+  reason: stdio MCP fails in Docker because npm was intentionally removed from the runtime image for CVE hygiene (PR #30243); any fix is a policy/tradeoff call rather than a clean bug fix
