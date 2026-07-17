@@ -10,3 +10,5 @@
   reason: unlimited SSO on Standard Plan is a pricing/product decision, not a code task
 - number: 27284
   reason: FIPS scrypt; internal BerriAI employee (yassin-berriai) already opened a draft PR, likely handled internally
+- number: 25390
+  reason: Anthropic /v1/messages streaming drops tool_use.input for Gemini; could not reproduce on HEAD across multiple Gemini models and payload shapes, likely already fixed post-v1.81.14
