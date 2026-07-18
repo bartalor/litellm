@@ -19,11 +19,18 @@ fi
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 
-CONFIG=".open-source-utils.toml"
-if [[ ! -f "$CONFIG" ]]; then
-    echo "Refusing: $CONFIG not found." >&2
+shopt -s nullglob
+config_matches=(*.open-source-utils.toml)
+shopt -u nullglob
+if [[ ${#config_matches[@]} -eq 0 ]]; then
+    echo "Refusing: no *.open-source-utils.toml file found." >&2
     exit 1
 fi
+if [[ ${#config_matches[@]} -gt 1 ]]; then
+    echo "Refusing: multiple *.open-source-utils.toml files found: ${config_matches[*]}" >&2
+    exit 1
+fi
+CONFIG="${config_matches[0]}"
 
 read_toml_key() {
     local key="$1"
