@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+# Verify a bug-fix commit isolates cleanly: tests fail on upstream + tests-only
+# diff, tests pass once the source diff is added.
+#
+# Usage: verify-fix-isolation <ref> <pytest-node-id>
+#
+# Creates a detached worktree at upstream_remote/upstream_branch (from
+# .open-source-utils.toml), applies the `tests/` slice of the diff
+# upstream..<ref>, runs the given pytest node and expects FAIL, then applies
+# the `litellm/` slice on top and expects PASS. The worktree is removed on exit.
+
+set -euo pipefail
+
+if [[ $# -ne 2 ]]; then
+    echo "usage: $(basename "$0") <ref> <pytest-node-id>" >&2
+    exit 2
+fi
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+CONFIG=".open-source-utils.toml"
+if [[ ! -f "$CONFIG" ]]; then
+    echo "Refusing: $CONFIG not found." >&2
+    exit 1
+fi
+
+read_toml_key() {
+    local key="$1"
+    awk -v k="$key" '
+        $1 == k && $2 == "=" {
+            gsub(/^"|"$/, "", $3)
+            print $3
+            exit
+        }
+    ' "$CONFIG"
+}
+
+upstream_remote="$(read_toml_key upstream_remote)"
+upstream_branch="$(read_toml_key upstream_branch)"
+
+if [[ -z "$upstream_remote" || -z "$upstream_branch" ]]; then
+    echo "Refusing: could not read upstream_remote/upstream_branch from $CONFIG." >&2
+    exit 1
+fi
+
+base_ref="${upstream_remote}/${upstream_branch}"
+base_sha="$(git rev-parse --verify "$base_ref")"
+feature_sha="$(git rev-parse --verify "$1^{commit}")"
+node_id="$2"
+
+worktree_dir="$(mktemp -d -t litellm-verify-XXXXXX)"
+
+cleanup() {
+    git worktree remove --force "$worktree_dir" >/dev/null 2>&1 || true
+    rm -rf "$worktree_dir"
+}
+trap cleanup EXIT
+
+echo "Worktree: $worktree_dir"
+echo "Base:     $base_ref ($base_sha)"
+echo "Feature:  $1 ($feature_sha)"
+echo "Test:     $node_id"
+echo
+
+git worktree add --detach "$worktree_dir" "$base_sha" >/dev/null
+
+pytest_bin() {
+    if [[ -x "$REPO_ROOT/.venv/bin/pytest" ]]; then
+        echo "$REPO_ROOT/.venv/bin/pytest"
+    else
+        command -v pytest
+    fi
+}
+PYTEST="$(pytest_bin)"
+
+apply_slice() {
+    local path="$1"
+    if ! git diff "$base_sha".."$feature_sha" -- "$path" | git -C "$worktree_dir" apply --index -; then
+        echo "Refusing: failed to apply $path slice." >&2
+        exit 1
+    fi
+}
+
+echo "=== apply tests/ slice, expect FAIL ==="
+apply_slice tests/
+set +e
+(cd "$worktree_dir" && "$PYTEST" "$node_id" -x)
+rc=$?
+set -e
+if [[ $rc -eq 0 ]]; then
+    echo "FAIL: test passed without the source fix; test does not pin the bug." >&2
+    exit 1
+fi
+echo "OK: test failed as expected."
+echo
+
+echo "=== apply litellm/ slice, expect PASS ==="
+apply_slice litellm/
+(cd "$worktree_dir" && "$PYTEST" "$node_id" -x)
+echo "OK: test passed with the source fix."
