@@ -43,3 +43,13 @@ Extract the file-list-consuming checks into a standalone script that takes a fil
 
 - Is the extraction worth the churn given the only concrete use case so far is "I forgot to run pre-commit before committing, want to run it retroactively"?
 - If yes, does the new script live under `scripts/` with a name that reflects "checks for a file list" rather than pre-commit specifically?
+
+## Strict gates hardcode `origin/litellm_internal_staging` as the base
+
+`Makefile` invokes `scripts/ruff_strict_gate.py`, `scripts/type_check_gate.py`, and `scripts/type_discipline_gate.py` with `--base origin/litellm_internal_staging` (lines 180, 188, 203), and `ruff_strict_gate.py` sets `DEFAULT_BASE = "origin/litellm_internal_staging"`. This assumes every contributor's `origin` is the upstream repository. For a fork workflow — where `origin` is your personal fork and `upstream` is the project — `origin/litellm_internal_staging` is stale (a snapshot of the last time your fork was synced), so the gate blames every violation introduced upstream since your last fork-sync on your change. Concrete data point: my fork was 158 commits behind, and the gate reported 32 added UP045 hits for a change whose actual diff added 1.
+
+The right base to compare against is "wherever this branch's changes started diverging from the intended target," which for a fork PR is `upstream/<target-branch>`. Hardcoding `origin/…` bakes in a monorepo/direct-push assumption. Options that would fix this without forcing every contributor to keep their fork in sync:
+
+- Read the base from an env var (e.g. `STRICT_GATE_BASE`) with the current value as fallback, so fork contributors can set it once.
+- Use `git for-each-ref` (or a repo-local config knob) to resolve the target branch on whichever remote actually has the freshest tip.
+- Have the Makefile fetch the base ref before running the gate, but from a configurable remote.
