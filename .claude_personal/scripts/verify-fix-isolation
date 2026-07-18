@@ -95,8 +95,10 @@ set +e
 (cd "$worktree_dir" && "$PYTEST" "$node_id" -x)
 rc=$?
 set -e
-if [[ $rc -eq 0 ]]; then
-    echo "FAIL: test passed without the source fix; test does not pin the bug." >&2
+if [[ $rc -ne 1 ]]; then
+    echo "FAIL: expected pytest rc=1 (test ran and failed), got rc=$rc." >&2
+    echo "  rc=0: test passed without the source fix; test does not pin the bug." >&2
+    echo "  rc=4/5: node id not collected; check the test path/class/method name." >&2
     exit 1
 fi
 echo "OK: test failed as expected."
