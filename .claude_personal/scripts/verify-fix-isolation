@@ -1,18 +1,20 @@
 #!/usr/bin/env bash
-# Verify a bug-fix commit isolates cleanly: tests fail on upstream + tests-only
-# diff, tests pass once the source diff is added.
+# Verify a bug-fix commit isolates cleanly: test fails on upstream + tests-only
+# diff, passes once the source diff is added.
 #
-# Usage: verify-fix-isolation <ref> <pytest-node-id>
+# Usage: verify-fix-isolation <ref> <test-file>
 #
 # Creates a detached worktree at upstream_remote/upstream_branch (from
-# .open-source-utils.toml), applies the `tests/` slice of the diff
-# upstream..<ref>, runs the given pytest node and expects FAIL, then applies
-# the `litellm/` slice on top and expects PASS. The worktree is removed on exit.
+# *.open-source-utils.toml), applies the `tests/` slice of the diff
+# upstream..<ref>, discovers the single `def test_*` added to <test-file>
+# by that diff (with its enclosing class, if any), runs it and expects FAIL,
+# then applies the `litellm/` slice on top and expects PASS. Refuses if
+# <test-file> has 0 or >1 added tests. The worktree is removed on exit.
 
 set -euo pipefail
 
 if [[ $# -ne 2 ]]; then
-    echo "usage: $(basename "$0") <ref> <pytest-node-id>" >&2
+    echo "usage: $(basename "$0") <ref> <test-file>" >&2
     exit 2
 fi
 
@@ -54,7 +56,23 @@ fi
 base_ref="${upstream_remote}/${upstream_branch}"
 base_sha="$(git rev-parse --verify "$base_ref")"
 feature_sha="$(git rev-parse --verify "$1^{commit}")"
-node_id="$2"
+test_file="$2"
+
+mapfile -t added_tests < <(
+    git diff "$base_sha".."$feature_sha" -- "$test_file" \
+        | grep -E '^\+[[:space:]]*def[[:space:]]+test_[A-Za-z0-9_]+' \
+        | sed -E 's/^\+[[:space:]]*def[[:space:]]+(test_[A-Za-z0-9_]+).*/\1/'
+)
+
+if [[ ${#added_tests[@]} -eq 0 ]]; then
+    echo "Refusing: no added 'def test_*' in $test_file between $base_ref and $1." >&2
+    exit 1
+fi
+if [[ ${#added_tests[@]} -gt 1 ]]; then
+    echo "Refusing: multiple added tests in $test_file: ${added_tests[*]}" >&2
+    exit 1
+fi
+test_name="${added_tests[0]}"
 
 worktree_dir="$(mktemp -d -t litellm-verify-XXXXXX)"
 
@@ -67,7 +85,7 @@ trap cleanup EXIT
 echo "Worktree: $worktree_dir"
 echo "Base:     $base_ref ($base_sha)"
 echo "Feature:  $1 ($feature_sha)"
-echo "Test:     $node_id"
+echo "Test fn:  $test_name"
 echo
 
 git worktree add --detach "$worktree_dir" "$base_sha" >/dev/null
@@ -91,6 +109,25 @@ apply_slice() {
 
 echo "=== apply tests/ slice, expect FAIL ==="
 apply_slice tests/
+
+class_name="$(
+    awk -v t="$test_name" '
+        /^class[[:space:]]+[A-Za-z_][A-Za-z0-9_]*/ {
+            match($0, /^class[[:space:]]+[A-Za-z_][A-Za-z0-9_]*/)
+            cls = substr($0, 7, RLENGTH - 6)
+            sub(/^[[:space:]]+/, "", cls)
+        }
+        $0 ~ "^[[:space:]]+def[[:space:]]+" t "[[:space:]]*\\(" { print cls; exit }
+    ' "$worktree_dir/$test_file"
+)"
+
+if [[ -n "$class_name" ]]; then
+    node_id="${test_file}::${class_name}::${test_name}"
+else
+    node_id="${test_file}::${test_name}"
+fi
+echo "Node id:  $node_id"
+
 set +e
 (cd "$worktree_dir" && "$PYTEST" "$node_id" -x)
 rc=$?
