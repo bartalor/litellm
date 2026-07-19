@@ -57,6 +57,9 @@ fi
 ORIGIN_REF="origin/${upstream_branch}"
 UPSTREAM_REF="${upstream_remote}/${upstream_branch}"
 
+git fetch "$upstream_remote" "${upstream_branch}:refs/remotes/${upstream_remote}/${upstream_branch}"
+git fetch origin "${upstream_branch}:refs/remotes/origin/${upstream_branch}"
+
 origin_sha="$(git rev-parse --verify "$ORIGIN_REF" 2>/dev/null || true)"
 upstream_sha="$(git rev-parse --verify "$UPSTREAM_REF" 2>/dev/null || true)"
 
