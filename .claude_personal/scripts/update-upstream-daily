@@ -47,11 +47,19 @@ fi
 
 old_branch="$(read_toml_key upstream_branch)"
 
+upstream_url="$(git remote get-url "$upstream_remote")"
+repo_slug="$(
+    echo "$upstream_url" \
+        | sed -E 's#(git@github\.com:|https://github\.com/)##; s#\.git$##'
+)"
+if [[ -z "$repo_slug" || "$repo_slug" != */* ]]; then
+    echo "Refusing: could not derive <owner>/<repo> from $upstream_url." >&2
+    exit 1
+fi
+
 newest="$(
-    git ls-remote "$upstream_remote" 'refs/heads/litellm_oss_daily_*' \
-        | awk '{ print $2 }' \
-        | sed 's#^refs/heads/##' \
-        | grep -E '^litellm_oss_daily_[0-9]{4}_[0-9]{2}_[0-9]{2}$' \
+    gh api "repos/$repo_slug/branches" --paginate \
+        -q '.[].name | select(test("^litellm_oss_daily_[0-9]{4}_[0-9]{2}_[0-9]{2}$"))' \
         | sort \
         | tail -1
 )"
