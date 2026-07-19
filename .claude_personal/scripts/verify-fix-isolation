@@ -146,3 +146,5 @@ echo "=== apply litellm/ slice, expect PASS ==="
 apply_slice litellm/
 (cd "$worktree_dir" && "$PYTEST" "$node_id" -x)
 echo "OK: test passed with the source fix."
+echo
+echo "PASS: fix isolates cleanly (fails without source diff, passes with it)."
