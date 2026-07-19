@@ -54,6 +54,7 @@ if [[ -z "$upstream_remote" || -z "$upstream_branch" ]]; then
 fi
 
 base_ref="${upstream_remote}/${upstream_branch}"
+git fetch "$upstream_remote" "${upstream_branch}:refs/remotes/${upstream_remote}/${upstream_branch}"
 base_sha="$(git rev-parse --verify "$base_ref")"
 feature_sha="$(git rev-parse --verify "$1^{commit}")"
 test_file="$2"
